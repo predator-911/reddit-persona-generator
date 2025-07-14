@@ -1,4 +1,9 @@
-# 🚀 Reddit Persona Analyzer 
+#!/usr/bin/env python3
+"""
+Reddit Persona Analyzer
+A fast, free tool for analyzing Reddit user personalities and behavior patterns.
+"""
+
 import os
 import json
 import time
@@ -8,90 +13,36 @@ from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict, Counter
 import multiprocessing as mp
+from typing import Dict, List, Tuple, Optional, Any
 
-# 🔐 Secure Configuration Loading
-def load_config():
-    """
-    Load configuration from environment variables or config file.
-    This ensures credentials are never hardcoded in the script.
-    """
-    print("🔐 Loading secure configuration...")
-    
-    # Try environment variables first (recommended for production)
-    config = {
-        'REDDIT_CLIENT_ID': os.getenv('REDDIT_CLIENT_ID'),
-        'REDDIT_CLIENT_SECRET': os.getenv('REDDIT_CLIENT_SECRET'),
-        'REDDIT_USER_AGENT': os.getenv('REDDIT_USER_AGENT', 'persona_analyzer_script'),
-        'MAX_WORKERS': int(os.getenv('MAX_WORKERS', '4')),
-        'BATCH_SIZE': int(os.getenv('BATCH_SIZE', '50')),
-        'CACHE_ENABLED': os.getenv('CACHE_ENABLED', 'True').lower() == 'true',
-    }
-    
-    # If environment variables not found, try config file
-    if not config['REDDIT_CLIENT_ID']:
-        try:
-            from config import CONFIG as FILE_CONFIG
-            config.update(FILE_CONFIG)
-            print("✅ Configuration loaded from config.py")
-        except ImportError:
-            print("❌ No configuration found!")
-            print("\nPlease setup your Reddit API credentials:")
-            print("Option 1: Copy config.py.example to config.py and fill in your credentials")
-            print("Option 2: Set environment variables (see .env.example)")
-            print("\nGet credentials from: https://www.reddit.com/prefs/apps")
-            exit(1)
-    else:
-        print("✅ Configuration loaded from environment variables")
-    
-    # Validate required fields
-    required_fields = ['REDDIT_CLIENT_ID', 'REDDIT_CLIENT_SECRET']
-    for field in required_fields:
-        if not config[field] or config[field] in ['your_client_id_here', 'your_client_secret_here']:
-            print(f"❌ Missing or invalid {field}")
-            print("Please check your configuration and try again!")
-            exit(1)
-    
-    return config
-
-# Load configuration securely
-try:
-    CONFIG = load_config()
-except Exception as e:
-    print(f"❌ Configuration error: {e}")
-    exit(1)
-
-# 🧠 Optimized imports with lazy loading
+# Third-party imports
 try:
     import praw
     from colorama import Fore, Style, init
     from tqdm import tqdm
-    import concurrent.futures
     print(f"{Fore.GREEN}✅ Core libraries loaded successfully!{Style.RESET_ALL}")
 except ImportError as e:
     print(f"{Fore.RED}❌ Import error: {e}{Style.RESET_ALL}")
-    print("Please install required packages:")
-    print("pip install -r requirements.txt")
+    print("Please install required dependencies: pip install -r requirements.txt")
     exit(1)
 
-# Optional AI imports (loaded only when needed)
-def load_ai_dependencies():
-    """Lazy load AI dependencies only when needed."""
-    try:
-        from transformers import pipeline
-        import torch
-        return pipeline, torch
-    except ImportError:
-        return None, None
-
-# Initialize colorama
+# Initialize colorama for cross-platform colored output
 init(autoreset=True)
 
-class FastRedditPersonaAnalyzer:
-    def __init__(self, config):
-        """Initialize with optimized settings."""
+class RedditPersonaAnalyzer:
+    """
+    Ultra-fast Reddit persona analyzer using rule-based AI and parallel processing.
+    """
+    
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize the analyzer with configuration.
+        
+        Args:
+            config: Dictionary containing Reddit API credentials and settings
+        """
         self.config = config
         self.reddit = None
-        self.ai_pipeline = None
         self.cache = {}
         self.stats = {
             'total_posts': 0,
@@ -102,8 +53,8 @@ class FastRedditPersonaAnalyzer:
         }
         self.setup_reddit_client()
     
-    def setup_reddit_client(self):
-        """Setup Reddit client with secure credentials."""
+    def setup_reddit_client(self) -> None:
+        """Setup Reddit client with optimized settings."""
         try:
             self.reddit = praw.Reddit(
                 client_id=self.config['REDDIT_CLIENT_ID'],
@@ -112,20 +63,28 @@ class FastRedditPersonaAnalyzer:
                 check_for_async=False,
                 timeout=30
             )
-            
-            # Test the connection
+            # Test connection
             self.reddit.user.me()
             print(f"{Fore.GREEN}🔗 Reddit client initialized successfully!{Style.RESET_ALL}")
-            
         except Exception as e:
-            print(f"{Fore.RED}❌ Reddit client setup failed: {e}{Style.RESET_ALL}")
-            print(f"{Fore.YELLOW}💡 Please check your Reddit API credentials{Style.RESET_ALL}")
-            print(f"   Get credentials from: https://www.reddit.com/prefs/apps")
+            print(f"{Fore.RED}❌ Reddit setup failed: {e}{Style.RESET_ALL}")
+            print("Please check your Reddit API credentials in config.json")
             exit(1)
     
-    def parallel_scrape_user_data(self, username, post_limit=100, comment_limit=100):
-        """Ultra-fast parallel data scraping."""
-        print(f"{Fore.BLUE}🔍 Fast-analyzing user: {Fore.WHITE}u/{username}{Style.RESET_ALL}")
+    def parallel_scrape_user_data(self, username: str, post_limit: int = 100, 
+                                 comment_limit: int = 100) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+        """
+        Ultra-fast parallel data scraping from Reddit user profile.
+        
+        Args:
+            username: Reddit username (without u/ prefix)
+            post_limit: Maximum number of posts to analyze
+            comment_limit: Maximum number of comments to analyze
+            
+        Returns:
+            Tuple of (posts, comments) where each is a list of (text, url) tuples
+        """
+        print(f"{Fore.BLUE}🔍 Analyzing user: {Fore.WHITE}u/{username}{Style.RESET_ALL}")
         
         # Check cache first
         cache_key = f"{username}_{post_limit}_{comment_limit}"
@@ -136,25 +95,19 @@ class FastRedditPersonaAnalyzer:
         
         try:
             user = self.reddit.redditor(username)
-            
             # Test if user exists
-            try:
-                user.id
-            except:
-                print(f"{Fore.RED}❌ User u/{username} not found or suspended{Style.RESET_ALL}")
-                return None, None
+            user.id
             
             posts = []
             comments = []
             
             # Parallel data collection
             with ThreadPoolExecutor(max_workers=self.config['MAX_WORKERS']) as executor:
-                # Submit both tasks simultaneously
                 post_future = executor.submit(self._scrape_posts, user, post_limit)
                 comment_future = executor.submit(self._scrape_comments, user, comment_limit)
                 
-                # Collect results with progress tracking
-                with tqdm(total=2, desc="Scraping", colour="cyan") as pbar:
+                # Collect results with progress indication
+                with tqdm(total=2, desc="Collecting data") as pbar:
                     posts = post_future.result()
                     pbar.update(1)
                     comments = comment_future.result()
@@ -169,274 +122,296 @@ class FastRedditPersonaAnalyzer:
             if self.config['CACHE_ENABLED']:
                 self.cache[cache_key] = result
             
-            print(f"{Fore.GREEN}⚡ Fast collection complete: {len(posts)} posts, {len(comments)} comments{Style.RESET_ALL}")
+            print(f"{Fore.GREEN}⚡ Data collection complete: {len(posts)} posts, {len(comments)} comments{Style.RESET_ALL}")
             return result
             
         except Exception as e:
-            print(f"{Fore.RED}❌ Error scraping data: {e}{Style.RESET_ALL}")
-            return None, None
+            print(f"{Fore.RED}❌ Error accessing user u/{username}: {e}{Style.RESET_ALL}")
+            return [], []
     
-    def _scrape_posts(self, user, limit):
-        """Optimized post scraping with error handling."""
+    def _scrape_posts(self, user, limit: int) -> List[Tuple[str, str]]:
+        """Scrape user posts efficiently."""
         posts = []
         try:
             for submission in user.submissions.new(limit=limit):
-                if submission.selftext and len(submission.selftext) > 10:
+                if submission.selftext and len(submission.selftext.strip()) > 10:
                     text = f"Title: {submission.title}\nBody: {submission.selftext}"
                     posts.append((text.strip(), f"https://www.reddit.com{submission.permalink}"))
         except Exception as e:
-            print(f"{Fore.YELLOW}⚠️ Warning: Error scraping posts: {e}{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}⚠️ Warning: Could not fetch all posts: {e}{Style.RESET_ALL}")
+        
         return posts
     
-    def _scrape_comments(self, user, limit):
-        """Optimized comment scraping with error handling."""
+    def _scrape_comments(self, user, limit: int) -> List[Tuple[str, str]]:
+        """Scrape user comments efficiently."""
         comments = []
         try:
             for comment in user.comments.new(limit=limit):
-                if hasattr(comment, 'body') and len(comment.body) > 10:
+                if hasattr(comment, 'body') and len(comment.body.strip()) > 10:
                     comments.append((comment.body.strip(), f"https://www.reddit.com{comment.permalink}"))
         except Exception as e:
-            print(f"{Fore.YELLOW}⚠️ Warning: Error scraping comments: {e}{Style.RESET_ALL}")
+            print(f"{Fore.YELLOW}⚠️ Warning: Could not fetch all comments: {e}{Style.RESET_ALL}")
+        
         return comments
     
-    def ultra_fast_analysis(self, posts, comments, username):
-        """Ultra-fast rule-based analysis with advanced algorithms."""
-        print(f"{Fore.CYAN}⚡ Ultra-fast analysis engine activated!{Style.RESET_ALL}")
+    def analyze_personality(self, posts: List[Tuple[str, str]], 
+                          comments: List[Tuple[str, str]], username: str) -> Dict[str, Any]:
+        """
+        Comprehensive personality analysis using advanced rule-based algorithms.
+        
+        Args:
+            posts: List of user posts
+            comments: List of user comments
+            username: Reddit username
+            
+        Returns:
+            Dictionary containing complete personality analysis
+        """
+        print(f"{Fore.CYAN}🧠 Running personality analysis...{Style.RESET_ALL}")
         
         # Combine all text efficiently
         all_texts = [text for text, _ in posts + comments]
         combined_text = " ".join(all_texts).lower()
         
-        # Advanced personality analysis using multiple algorithms
-        with tqdm(total=4, desc="Analysis", colour="magenta") as pbar:
-            personality_traits = self._analyze_personality_fast(combined_text, posts, comments)
+        # Multi-faceted analysis
+        with tqdm(total=4, desc="Analyzing personality") as pbar:
+            personality_traits = self._analyze_personality_traits(combined_text)
             pbar.update(1)
             
-            interests = self._extract_interests_fast(combined_text, all_texts)
+            interests = self._extract_interests(combined_text, all_texts)
             pbar.update(1)
             
-            communication_style = self._analyze_communication_fast(posts, comments)
+            communication_style = self._analyze_communication_style(posts, comments)
             pbar.update(1)
             
             behavioral_patterns = self._extract_behavioral_patterns(posts, comments)
             pbar.update(1)
         
         # Generate comprehensive report
-        report = self._generate_fast_report(
+        report = self._generate_analysis_report(
             username, personality_traits, interests, 
             communication_style, behavioral_patterns, posts, comments
         )
         
-        return report
+        return {
+            'personality_traits': personality_traits,
+            'interests': interests,
+            'communication_style': communication_style,
+            'behavioral_patterns': behavioral_patterns,
+            'report': report
+        }
     
-    def _analyze_personality_fast(self, text, posts, comments):
-        """Fast personality analysis using weighted indicators."""
+    def _analyze_personality_traits(self, text: str) -> Dict[str, float]:
+        """Analyze personality traits using weighted keyword analysis."""
         personality_indicators = {
             "Analytical": {
-                "keywords": ["analysis", "data", "research", "study", "evidence", "statistics", "logic", "rational", "objective", "fact"],
+                "keywords": ["analysis", "data", "research", "study", "evidence", "statistics", 
+                           "logic", "rational", "objective", "methodology", "systematic"],
                 "weight": 1.2
             },
             "Creative": {
-                "keywords": ["art", "music", "design", "creative", "imagine", "beautiful", "inspiration", "original", "artistic", "aesthetic"],
+                "keywords": ["art", "music", "design", "creative", "imagine", "beautiful", 
+                           "inspiration", "original", "artistic", "innovative"],
                 "weight": 1.1
             },
             "Social": {
-                "keywords": ["friends", "people", "social", "community", "together", "group", "team", "collaborate", "meet", "party"],
+                "keywords": ["friends", "people", "social", "community", "together", "group", 
+                           "team", "collaborate", "relationship", "connection"],
                 "weight": 1.0
             },
             "Technical": {
-                "keywords": ["code", "programming", "software", "tech", "computer", "algorithm", "development", "system", "api", "database"],
+                "keywords": ["code", "programming", "software", "tech", "computer", "algorithm", 
+                           "development", "system", "engineer", "technical"],
                 "weight": 1.3
             },
             "Intellectual": {
-                "keywords": ["learn", "knowledge", "understand", "think", "philosophy", "science", "education", "academic", "theory", "concept"],
+                "keywords": ["learn", "knowledge", "understand", "think", "philosophy", "science", 
+                           "education", "academic", "intellectual", "theory"],
                 "weight": 1.1
             },
             "Humorous": {
-                "keywords": ["funny", "hilarious", "joke", "lol", "humor", "comedy", "laugh", "amusing", "witty", "sarcastic"],
+                "keywords": ["lol", "haha", "funny", "joke", "humor", "hilarious", "lmao", 
+                           "comedy", "amusing", "entertaining"],
                 "weight": 0.9
             },
-            "Helpful": {
-                "keywords": ["help", "advice", "suggest", "recommend", "support", "assist", "guide", "solution", "answer", "explain"],
+            "Opinionated": {
+                "keywords": ["opinion", "believe", "think", "disagree", "argue", "debate", 
+                           "strongly", "definitely", "absolutely", "wrong"],
                 "weight": 1.0
             }
         }
         
         traits = {}
         for trait, data in personality_indicators.items():
-            score = sum(text.count(keyword) for keyword in data["keywords"]) * data["weight"]
-            if score > 2:
-                confidence = min(score * 8, 100)
-                traits[trait] = confidence
+            # Count keyword occurrences with context weighting
+            score = 0
+            for keyword in data["keywords"]:
+                count = text.count(keyword)
+                score += count * data["weight"]
+            
+            # Convert to confidence percentage
+            if score > 1:
+                confidence = min(score * 15, 100)  # Scale and cap at 100%
+                traits[trait] = round(confidence, 1)
         
         return traits
     
-    def _extract_interests_fast(self, text, all_texts):
-        """Fast interest extraction using pattern matching and keyword analysis."""
+    def _extract_interests(self, text: str, all_texts: List[str]) -> Dict[str, int]:
+        """Extract interests and topics using advanced pattern matching."""
         interests = defaultdict(int)
         
-        # Extract subreddits (primary interest indicator)
+        # Extract mentioned subreddits
         subreddits = re.findall(r'r/(\w+)', text)
         for sub in subreddits:
             interests[f"r/{sub}"] += 3
         
-        # Extract common topics using keyword frequency analysis
+        # Topic analysis using keyword clustering
         topic_keywords = {
-            "Gaming": ["game", "gaming", "play", "player", "steam", "console", "pc", "xbox", "playstation", "nintendo"],
-            "Technology": ["tech", "software", "app", "device", "digital", "internet", "mobile", "computer", "ai", "ml"],
-            "Sports": ["sport", "team", "player", "game", "season", "match", "football", "basketball", "soccer", "baseball"],
-            "Entertainment": ["movie", "show", "tv", "film", "series", "watch", "netflix", "youtube", "music", "band"],
-            "Finance": ["money", "invest", "stock", "crypto", "bitcoin", "finance", "trading", "market", "economy", "bank"],
-            "Health & Fitness": ["health", "fitness", "exercise", "diet", "medical", "doctor", "workout", "gym", "nutrition", "wellness"],
-            "Education": ["learn", "study", "school", "university", "education", "course", "student", "teacher", "academic", "knowledge"],
-            "Travel": ["travel", "trip", "vacation", "country", "city", "hotel", "flight", "tourism", "visit", "explore"],
-            "Food": ["food", "cook", "recipe", "restaurant", "eat", "meal", "cuisine", "chef", "kitchen", "dish"],
-            "Art & Design": ["art", "design", "draw", "paint", "creative", "artist", "gallery", "photography", "graphic", "visual"]
+            "Gaming": ["game", "gaming", "play", "player", "steam", "console", "pc", "xbox", "playstation"],
+            "Technology": ["tech", "software", "app", "device", "digital", "internet", "ai", "ml"],
+            "Sports": ["sport", "team", "player", "game", "season", "match", "football", "basketball"],
+            "Entertainment": ["movie", "show", "tv", "film", "series", "watch", "netflix", "streaming"],
+            "Finance": ["money", "invest", "stock", "crypto", "bitcoin", "finance", "trading", "market"],
+            "Health": ["health", "fitness", "exercise", "diet", "medical", "doctor", "workout", "nutrition"],
+            "Education": ["learn", "study", "school", "university", "education", "course", "degree", "academic"],
+            "Science": ["science", "research", "experiment", "theory", "physics", "chemistry", "biology"],
+            "Politics": ["politics", "government", "election", "vote", "policy", "political", "candidate"],
+            "Travel": ["travel", "trip", "vacation", "country", "city", "visit", "tourism", "explore"]
         }
         
         for topic, keywords in topic_keywords.items():
             score = sum(text.count(keyword) for keyword in keywords)
             if score > 2:
-                interests[topic] = score * 2
+                interests[topic] = score
         
+        # Return top interests sorted by relevance
         return dict(sorted(interests.items(), key=lambda x: x[1], reverse=True)[:15])
     
-    def _analyze_communication_fast(self, posts, comments):
-        """Fast communication style analysis."""
+    def _analyze_communication_style(self, posts: List[Tuple[str, str]], 
+                                   comments: List[Tuple[str, str]]) -> Dict[str, Any]:
+        """Analyze communication patterns and style."""
         if not posts and not comments:
             return {}
         
-        post_lengths = [len(text) for text, _ in posts] if posts else [0]
-        comment_lengths = [len(text) for text, _ in comments] if comments else [0]
-        all_texts = [text for text, _ in posts + comments]
+        post_lengths = [len(text) for text, _ in posts]
+        comment_lengths = [len(text) for text, _ in comments]
         
-        # Advanced communication metrics
+        all_texts = [text for text, _ in posts + comments]
+        combined_text = " ".join(all_texts).lower()
+        
+        # Advanced metrics
         metrics = {
             "avg_post_length": sum(post_lengths) / max(len(post_lengths), 1),
             "avg_comment_length": sum(comment_lengths) / max(len(comment_lengths), 1),
             "total_activity": len(posts) + len(comments),
             "post_to_comment_ratio": len(posts) / max(len(comments), 1),
             "verbosity": self._calculate_verbosity(all_texts),
-            "engagement_style": self._determine_engagement_style(posts, comments),
-            "sentiment_tendency": self._analyze_sentiment_basic(all_texts)
+            "formality": self._calculate_formality(combined_text),
+            "emotional_tone": self._analyze_emotional_tone(combined_text),
+            "question_frequency": combined_text.count('?') / max(len(all_texts), 1),
+            "exclamation_usage": combined_text.count('!') / max(len(all_texts), 1)
         }
         
         return metrics
     
-    def _calculate_verbosity(self, texts):
-        """Calculate verbosity level based on text length patterns."""
+    def _calculate_verbosity(self, texts: List[str]) -> str:
+        """Calculate verbosity level based on text lengths."""
         if not texts:
             return "Unknown"
         
         avg_length = sum(len(text) for text in texts) / len(texts)
-        if avg_length > 500:
-            return "Highly Verbose"
+        
+        if avg_length > 300:
+            return "Very High"
         elif avg_length > 200:
-            return "Verbose"
+            return "High"
         elif avg_length > 100:
             return "Moderate"
         else:
-            return "Concise"
+            return "Low"
     
-    def _determine_engagement_style(self, posts, comments):
-        """Determine user's engagement style preference."""
-        if len(comments) > len(posts) * 2:
-            return "Discussion-focused"
-        elif len(posts) > len(comments):
-            return "Content Creator"
+    def _calculate_formality(self, text: str) -> str:
+        """Calculate formality level of communication."""
+        formal_indicators = ["furthermore", "however", "therefore", "nevertheless", "consequently"]
+        informal_indicators = ["lol", "omg", "tbh", "imo", "btw", "wtf", "yeah", "gonna"]
+        
+        formal_score = sum(text.count(word) for word in formal_indicators)
+        informal_score = sum(text.count(word) for word in informal_indicators)
+        
+        if formal_score > informal_score * 2:
+            return "High"
+        elif informal_score > formal_score * 2:
+            return "Low"
         else:
-            return "Balanced Participant"
+            return "Moderate"
     
-    def _analyze_sentiment_basic(self, texts):
-        """Basic sentiment analysis using keyword indicators."""
-        if not texts:
-            return "Neutral"
+    def _analyze_emotional_tone(self, text: str) -> str:
+        """Analyze overall emotional tone."""
+        positive_words = ["good", "great", "excellent", "amazing", "wonderful", "fantastic", 
+                         "happy", "excited", "love", "awesome", "perfect", "brilliant"]
+        negative_words = ["bad", "terrible", "awful", "horrible", "hate", "angry", "sad", 
+                         "disappointed", "frustrated", "annoying", "stupid", "worst"]
         
-        positive_words = ["good", "great", "awesome", "amazing", "excellent", "fantastic", "wonderful", "perfect", "love", "like"]
-        negative_words = ["bad", "terrible", "awful", "hate", "horrible", "worst", "stupid", "annoying", "frustrating", "disappointed"]
-        
-        combined_text = " ".join(texts).lower()
-        positive_score = sum(combined_text.count(word) for word in positive_words)
-        negative_score = sum(combined_text.count(word) for word in negative_words)
+        positive_score = sum(text.count(word) for word in positive_words)
+        negative_score = sum(text.count(word) for word in negative_words)
         
         if positive_score > negative_score * 1.5:
-            return "Generally Positive"
+            return "Positive"
         elif negative_score > positive_score * 1.5:
-            return "Generally Critical"
+            return "Negative"
         else:
-            return "Balanced"
+            return "Neutral"
     
-    def _extract_behavioral_patterns(self, posts, comments):
+    def _extract_behavioral_patterns(self, posts: List[Tuple[str, str]], 
+                                   comments: List[Tuple[str, str]]) -> Dict[str, str]:
         """Extract behavioral patterns from posting data."""
         total_activity = len(posts) + len(comments)
         
         patterns = {
-            "engagement_level": self._categorize_engagement(total_activity),
-            "content_preference": "Comments" if len(comments) > len(posts) else "Posts" if len(posts) > len(comments) else "Balanced",
-            "discussion_style": self._analyze_discussion_style(comments),
-            "activity_level": self._categorize_activity_level(total_activity),
-            "interaction_pattern": self._analyze_interaction_pattern(posts, comments)
+            "engagement_level": self._classify_engagement_level(total_activity),
+            "content_preference": "Comments" if len(comments) > len(posts) else "Posts",
+            "discussion_style": "Active" if len(comments) > 30 else "Passive",
+            "activity_type": self._classify_activity_type(posts, comments)
         }
         
         return patterns
     
-    def _categorize_engagement(self, total_activity):
-        """Categorize user engagement level."""
-        if total_activity > 80:
-            return "Highly Active"
-        elif total_activity > 40:
-            return "Active"
-        elif total_activity > 15:
+    def _classify_engagement_level(self, total_activity: int) -> str:
+        """Classify user engagement level."""
+        if total_activity > 100:
+            return "Very High"
+        elif total_activity > 50:
+            return "High"
+        elif total_activity > 20:
             return "Moderate"
         else:
-            return "Casual"
+            return "Low"
     
-    def _analyze_discussion_style(self, comments):
-        """Analyze how user participates in discussions."""
-        if not comments:
-            return "Non-participant"
-        
-        avg_comment_length = sum(len(text) for text, _ in comments) / len(comments)
-        
-        if avg_comment_length > 300:
-            return "Detailed Contributor"
-        elif avg_comment_length > 100:
-            return "Thoughtful Participant"
-        else:
-            return "Brief Responder"
-    
-    def _categorize_activity_level(self, total_activity):
-        """Categorize overall activity level."""
-        if total_activity > 100:
-            return "Power User"
-        elif total_activity > 50:
-            return "Regular User"
-        elif total_activity > 20:
-            return "Occasional User"
-        else:
-            return "Infrequent User"
-    
-    def _analyze_interaction_pattern(self, posts, comments):
-        """Analyze interaction patterns."""
+    def _classify_activity_type(self, posts: List[Tuple[str, str]], 
+                               comments: List[Tuple[str, str]]) -> str:
+        """Classify the type of user activity."""
         if len(posts) > len(comments) * 2:
             return "Content Creator"
         elif len(comments) > len(posts) * 3:
-            return "Community Participant"
+            return "Active Commenter"
         else:
-            return "Balanced Contributor"
+            return "Balanced Participant"
     
-    def _generate_fast_report(self, username, traits, interests, communication, patterns, posts, comments):
-        """Generate comprehensive report with enhanced formatting."""
+    def _generate_analysis_report(self, username: str, traits: Dict[str, float], 
+                                interests: Dict[str, int], communication: Dict[str, Any],
+                                patterns: Dict[str, str], posts: List[Tuple[str, str]], 
+                                comments: List[Tuple[str, str]]) -> str:
+        """Generate comprehensive analysis report."""
         report = f"""
 {'='*80}
 🧠 REDDIT PERSONA ANALYSIS REPORT
 {'='*80}
 
 👤 USER: u/{username}
-🔍 ANALYSIS ENGINE: Ultra-Fast Multi-Algorithm Analysis (100% Free)
+🔍 ANALYSIS ENGINE: Advanced Rule-Based AI with Pattern Recognition
 📊 DATA POINTS: {len(posts)} posts, {len(comments)} comments
 ⚡ PROCESSING: Multi-threaded parallel analysis
-🕒 GENERATED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+📅 GENERATED: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 
 {'='*80}
 🎯 PERSONALITY TRAITS
@@ -459,240 +434,242 @@ class FastRedditPersonaAnalyzer:
 • Total Activity: {communication.get('total_activity', 0)} interactions
 • Post-to-Comment Ratio: {communication.get('post_to_comment_ratio', 0):.2f}
 • Verbosity Level: {communication.get('verbosity', 'Unknown')}
-• Engagement Style: {communication.get('engagement_style', 'Unknown')}
-• Sentiment Tendency: {communication.get('sentiment_tendency', 'Unknown')}
+• Formality Level: {communication.get('formality', 'Unknown')}
+• Emotional Tone: {communication.get('emotional_tone', 'Unknown')}
+• Question Frequency: {communication.get('question_frequency', 0):.2f} per post
+• Exclamation Usage: {communication.get('exclamation_usage', 0):.2f} per post
 
 {'='*80}
 🎭 BEHAVIORAL PATTERNS
 {'='*80}
 
-# Continuing from where the code cut off...
-
 • Engagement Level: {patterns.get('engagement_level', 'Unknown')}
 • Content Preference: {patterns.get('content_preference', 'Unknown')}
 • Discussion Style: {patterns.get('discussion_style', 'Unknown')}
-• Activity Level: {patterns.get('activity_level', 'Unknown')}
-• Interaction Pattern: {patterns.get('interaction_pattern', 'Unknown')}
+• Activity Type: {patterns.get('activity_type', 'Unknown')}
 
 {'='*80}
-📈 QUICK INSIGHTS
+📈 ANALYSIS STATISTICS
 {'='*80}
 
-{self._generate_quick_insights(traits, interests, communication, patterns)}
-
-{'='*80}
-⚡ PERFORMANCE METRICS
-{'='*80}
-
+• Processing Speed: Ultra-Fast (Multi-threaded)
+• Memory Usage: Optimized with caching
 • Cache Hits: {self.stats['cache_hits']}
-• Processing Time: {self.stats.get('analysis_time', 0):.2f} seconds
-• Engine: Rule-based Multi-Algorithm Analysis
-• Accuracy: High (based on activity patterns)
+• Analysis Method: Advanced Rule-Based with Pattern Recognition
+• Confidence Level: High (based on {len(posts) + len(comments)} data points)
 
 {'='*80}
-🛡️ PRIVACY & SECURITY
+📝 CONTENT CITATIONS
 {'='*80}
 
-✅ All data analyzed locally - no external AI APIs used
-✅ No personal information stored or transmitted
-✅ Analysis based only on public Reddit activity
-✅ Results generated using secure, open-source algorithms
+This analysis is based on the following Reddit content:
+
+POSTS ANALYZED:
+{self._format_citations(posts, "Post")}
+
+COMMENTS ANALYZED:
+{self._format_citations(comments, "Comment")}
 
 {'='*80}
+⚖️ DISCLAIMER
+{'='*80}
+
+This analysis is generated using advanced algorithms and is for educational 
+purposes only. Results are based on publicly available Reddit data and should 
+not be used for making important decisions about individuals.
+
+Generated by Reddit Persona Analyzer v2.0
+Repository: https://github.com/yourusername/reddit-persona-analyzer
         """
+        
         return report
-
-    def _format_traits(self, traits):
-        """Format personality traits with visual indicators."""
+    
+    def _format_traits(self, traits: Dict[str, float]) -> str:
+        """Format personality traits for display."""
         if not traits:
-            return "• No significant personality traits detected from available data"
+            return "• No strong personality traits detected from available data"
         
         formatted = []
         for trait, confidence in sorted(traits.items(), key=lambda x: x[1], reverse=True):
-            bar_length = int(confidence / 10)
-            bar = "█" * bar_length + "▒" * (10 - bar_length)
-            formatted.append(f"• {trait:<15} [{bar}] {confidence:.1f}%")
+            bars = "█" * int(confidence / 10)
+            formatted.append(f"• {trait:<15} {confidence:5.1f}% {bars}")
         
         return "\n".join(formatted)
-
-    def _format_interests(self, interests):
-        """Format interests with relevance indicators."""
+    
+    def _format_interests(self, interests: Dict[str, int]) -> str:
+        """Format interests for display."""
         if not interests:
-            return "• No specific interests detected from available data"
+            return "• No clear interests detected from available data"
         
         formatted = []
-        max_score = max(interests.values()) if interests else 1
-        
-        for interest, score in list(interests.items())[:10]:  # Top 10 interests
-            relevance = int((score / max_score) * 5)
-            stars = "★" * relevance + "☆" * (5 - relevance)
-            formatted.append(f"• {interest:<20} {stars} (Score: {score})")
+        for interest, score in interests.items():
+            bars = "█" * min(score, 10)
+            formatted.append(f"• {interest:<20} (score: {score:2d}) {bars}")
         
         return "\n".join(formatted)
-
-    def _generate_quick_insights(self, traits, interests, communication, patterns):
-        """Generate quick insights based on analysis."""
-        insights = []
+    
+    def _format_citations(self, content_list: List[Tuple[str, str]], content_type: str) -> str:
+        """Format citations for the report."""
+        if not content_list:
+            return f"• No {content_type.lower()}s available for analysis"
         
-        # Personality insights
-        if traits:
-            top_trait = max(traits.items(), key=lambda x: x[1])
-            insights.append(f"• Primary personality trait: {top_trait[0]} ({top_trait[1]:.1f}% confidence)")
+        citations = []
+        for i, (text, url) in enumerate(content_list[:5], 1):
+            preview = text[:100] + "..." if len(text) > 100 else text
+            citations.append(f"{i}. {content_type}: \"{preview}\"\n   Source: {url}")
         
-        # Activity insights
-        total_activity = communication.get('total_activity', 0)
-        if total_activity > 50:
-            insights.append(f"• High activity user with {total_activity} total interactions")
-        elif total_activity > 20:
-            insights.append(f"• Moderate activity user with {total_activity} total interactions")
-        else:
-            insights.append(f"• Low activity user with {total_activity} total interactions")
+        if len(content_list) > 5:
+            citations.append(f"... and {len(content_list) - 5} more {content_type.lower()}s")
         
-        # Communication insights
-        verbosity = communication.get('verbosity', 'Unknown')
-        if verbosity != 'Unknown':
-            insights.append(f"• Communication style: {verbosity}")
+        return "\n".join(citations)
+    
+    def save_report(self, username: str, report: str, output_dir: str = "reports") -> Optional[str]:
+        """Save analysis report to file."""
+        os.makedirs(output_dir, exist_ok=True)
         
-        # Interest insights
-        if interests:
-            top_interest = list(interests.keys())[0]
-            insights.append(f"• Primary interest area: {top_interest}")
-        
-        # Behavioral insights
-        engagement = patterns.get('engagement_level', 'Unknown')
-        if engagement != 'Unknown':
-            insights.append(f"• User engagement level: {engagement}")
-        
-        return "\n".join(insights) if insights else "• Analysis complete - see detailed sections above"
-
-    def save_report(self, report, username):
-        """Save report to file with timestamp."""
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"reddit_analysis_{username}_{timestamp}.txt"
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = os.path.join(output_dir, f"{username}_analysis_{timestamp}.txt")
         
         try:
-            with open(filename, 'w', encoding='utf-8') as f:
+            with open(filename, "w", encoding='utf-8') as f:
                 f.write(report)
-            print(f"{Fore.GREEN}💾 Report saved to: {filename}{Style.RESET_ALL}")
+            print(f"{Fore.GREEN}💾 Report saved: {Fore.WHITE}{filename}{Style.RESET_ALL}")
             return filename
         except Exception as e:
-            print(f"{Fore.RED}❌ Error saving report: {e}{Style.RESET_ALL}")
+            print(f"{Fore.RED}❌ Save error: {e}{Style.RESET_ALL}")
             return None
-
-    def analyze_user(self, username, save_to_file=True):
-        """Main analysis method - orchestrates the entire process."""
-        print(f"{Fore.BLUE}{'='*60}")
-        print(f"{Fore.BLUE}🚀 REDDIT PERSONA ANALYZER - STARTING ANALYSIS")
-        print(f"{Fore.BLUE}{'='*60}{Style.RESET_ALL}")
+    
+    def analyze_user(self, username: str) -> Optional[Dict[str, Any]]:
+        """
+        Main analysis function for a Reddit user.
         
+        Args:
+            username: Reddit username (without u/ prefix)
+            
+        Returns:
+            Dictionary containing analysis results or None if failed
+        """
         self.stats['start_time'] = time.time()
         
-        # Step 1: Scrape user data
+        print(f"{Fore.CYAN}🚀 Starting analysis for u/{username}{Style.RESET_ALL}")
+        
+        # Data collection
         posts, comments = self.parallel_scrape_user_data(username)
         
-        if posts is None and comments is None:
-            print(f"{Fore.RED}❌ Analysis failed - could not retrieve user data{Style.RESET_ALL}")
+        if not posts and not comments:
+            print(f"{Fore.RED}⚠️ No data found for u/{username} - user may not exist or have no content{Style.RESET_ALL}")
             return None
         
-        # Step 2: Perform analysis
-        analysis_start = time.time()
-        report = self.ultra_fast_analysis(posts, comments, username)
-        self.stats['analysis_time'] = time.time() - analysis_start
+        # Analysis
+        analysis_results = self.analyze_personality(posts, comments, username)
         
-        # Step 3: Display results
-        print(f"\n{Fore.GREEN}{'='*60}")
-        print(f"{Fore.GREEN}✅ ANALYSIS COMPLETE")
-        print(f"{Fore.GREEN}{'='*60}{Style.RESET_ALL}")
+        # Save report
+        filename = self.save_report(username, analysis_results['report'])
         
-        print(report)
+        # Update stats
+        self.stats['analysis_time'] = time.time() - self.stats['start_time']
         
-        # Step 4: Save to file if requested
-        if save_to_file:
-            self.save_report(report, username)
+        # Display completion message
+        print(f"\n{Fore.GREEN}✅ Analysis complete for u/{username}!{Style.RESET_ALL}")
+        print(f"⏱️  Time: {self.stats['analysis_time']:.2f}s | "
+              f"📊 Data: {len(posts)} posts, {len(comments)} comments")
         
-        # Step 5: Display performance stats
-        total_time = time.time() - self.stats['start_time']
-        print(f"\n{Fore.CYAN}⚡ PERFORMANCE SUMMARY:")
-        print(f"   Total Time: {total_time:.2f} seconds")
-        print(f"   Analysis Time: {self.stats['analysis_time']:.2f} seconds")
-        print(f"   Data Points: {self.stats['total_posts']} posts, {self.stats['total_comments']} comments")
-        print(f"   Cache Hits: {self.stats['cache_hits']}")
-        print(f"   Memory Usage: Optimized with garbage collection{Style.RESET_ALL}")
+        analysis_results['filename'] = filename
+        return analysis_results
+
+
+def extract_username_from_url(url_or_username: str) -> str:
+    """
+    Extract username from Reddit URL or return username as-is.
+    
+    Args:
+        url_or_username: Reddit URL or username
         
-        # Cleanup
-        gc.collect()
+    Returns:
+        Clean username without prefixes
+    """
+    if url_or_username.startswith('http'):
+        # Handle both /user/ and /u/ formats
+        for pattern in [r'/user/([^/]+)', r'/u/([^/]+)']:
+            match = re.search(pattern, url_or_username)
+            if match:
+                return match.group(1)
+    
+    # Remove u/ prefix if present
+    if url_or_username.startswith('u/'):
+        return url_or_username[2:]
+    
+    return url_or_username
+
+
+def load_config(config_path: str = "config.json") -> Dict[str, Any]:
+    """
+    Load configuration from JSON file.
+    
+    Args:
+        config_path: Path to configuration file
         
-        return report
+    Returns:
+        Configuration dictionary
+    """
+    try:
+        with open(config_path, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"{Fore.RED}❌ Configuration file not found: {config_path}{Style.RESET_ALL}")
+        print(f"Please create {config_path} with your Reddit API credentials.")
+        return None
+
 
 def main():
-    """Main function with enhanced user interface."""
-    print(f"{Fore.MAGENTA}{'='*80}")
-    print(f"{Fore.MAGENTA}🧠 REDDIT PERSONA ANALYZER - ULTRA FAST EDITION")
-    print(f"{Fore.MAGENTA}{'='*80}")
-    print(f"{Fore.MAGENTA}🔥 Features: Multi-threaded • Cached • Secure • 100% Free")
-    print(f"{Fore.MAGENTA}⚡ Analysis Engine: Advanced Rule-based Algorithm")
-    print(f"{Fore.MAGENTA}🛡️ Privacy: All processing done locally")
-    print(f"{Fore.MAGENTA}{'='*80}{Style.RESET_ALL}")
+    """Main function with enhanced user interaction."""
+    # Display banner
+    banner = f"""
+{Fore.CYAN}
+╔══════════════════════════════════════════════════════════════╗
+║              🚀 REDDIT PERSONA ANALYZER 🚀                  ║
+║                 Advanced AI-Powered Analysis                 ║
+║                                                              ║
+║  ⚡ Multi-threaded Parallel Processing                       ║
+║  🧠 Advanced Rule-Based AI Analysis                          ║
+║  💾 Smart Caching System                                     ║
+║  📊 Comprehensive Personality Reports                        ║
+║  🔍 Deep Behavioral Pattern Recognition                      ║
+╚══════════════════════════════════════════════════════════════╝
+{Style.RESET_ALL}
+    """
+    print(banner)
     
-    try:
-        # Initialize analyzer
-        analyzer = FastRedditPersonaAnalyzer(CONFIG)
+    # Load configuration
+    config = load_config()
+    if not config:
+        return
+    
+    # Initialize analyzer
+    analyzer = RedditPersonaAnalyzer(config)
+    
+    # Interactive mode
+    while True:
+        print(f"\n{Fore.CYAN}🔍 Enter Reddit user URL or username (or 'quit' to exit):{Style.RESET_ALL}")
+        print(f"{Fore.YELLOW}Examples: kojied, u/username, https://reddit.com/user/username{Style.RESET_ALL}")
         
-        # Interactive mode
-        while True:
-            print(f"\n{Fore.CYAN}🎯 ANALYSIS OPTIONS:")
-            print(f"   1. Analyze a Reddit user")
-            print(f"   2. Batch analyze multiple users")
-            print(f"   3. View cache statistics")
-            print(f"   4. Clear cache")
-            print(f"   5. Exit{Style.RESET_ALL}")
-            
-            choice = input(f"\n{Fore.YELLOW}Enter your choice (1-5): {Style.RESET_ALL}")
-            
-            if choice == '1':
-                username = input(f"{Fore.CYAN}Enter Reddit username (without u/): {Style.RESET_ALL}")
-                if username:
-                    analyzer.analyze_user(username)
-                else:
-                    print(f"{Fore.RED}❌ Please enter a valid username{Style.RESET_ALL}")
-            
-            elif choice == '2':
-                print(f"{Fore.CYAN}Enter usernames separated by commas:{Style.RESET_ALL}")
-                usernames = input().split(',')
-                usernames = [u.strip() for u in usernames if u.strip()]
-                
-                if usernames:
-                    for username in usernames:
-                        print(f"\n{Fore.BLUE}Analyzing: {username}{Style.RESET_ALL}")
-                        analyzer.analyze_user(username)
-                        print(f"\n{'-'*60}")
-                else:
-                    print(f"{Fore.RED}❌ Please enter valid usernames{Style.RESET_ALL}")
-            
-            elif choice == '3':
-                print(f"\n{Fore.CYAN}📊 CACHE STATISTICS:")
-                print(f"   Cached entries: {len(analyzer.cache)}")
-                print(f"   Total cache hits: {analyzer.stats['cache_hits']}")
-                print(f"   Cache enabled: {CONFIG['CACHE_ENABLED']}{Style.RESET_ALL}")
-            
-            elif choice == '4':
-                analyzer.cache.clear()
-                print(f"{Fore.GREEN}✅ Cache cleared successfully{Style.RESET_ALL}")
-            
-            elif choice == '5':
-                print(f"{Fore.GREEN}👋 Thanks for using Reddit Persona Analyzer!{Style.RESET_ALL}")
-                break
-            
-            else:
-                print(f"{Fore.RED}❌ Invalid choice. Please enter 1-5{Style.RESET_ALL}")
-    
-    except KeyboardInterrupt:
-        print(f"\n{Fore.YELLOW}⚠️ Analysis interrupted by user{Style.RESET_ALL}")
-    except Exception as e:
-        print(f"{Fore.RED}❌ Unexpected error: {e}{Style.RESET_ALL}")
-    finally:
-        print(f"{Fore.BLUE}🔧 Cleaning up resources...{Style.RESET_ALL}")
-        gc.collect()
+        user_input = input(">> ").strip()
+        
+        if user_input.lower() in ['quit', 'exit', 'q']:
+            print(f"{Fore.GREEN}👋 Thanks for using Reddit Persona Analyzer!{Style.RESET_ALL}")
+            break
+        
+        if not user_input:
+            continue
+        
+        username = extract_username_from_url(user_input)
+        result = analyzer.analyze_user(username)
+        
+        if result:
+            print(f"{Fore.GREEN}📄 Report saved to: {result.get('filename', 'N/A')}{Style.RESET_ALL}")
+        
+        print(f"{Fore.BLUE}{'='*60}{Style.RESET_ALL}")
+
 
 if __name__ == "__main__":
     main()
