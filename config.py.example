@@ -1,0 +1,9 @@
+# Configuration Template
+CONFIG = {
+    'REDDIT_CLIENT_ID': '-ZUQnWMiteQ7OHBfd-CSEA',
+    'REDDIT_CLIENT_SECRET': '925n0mQja5tsLApLAfz7Run0_yiLOw',
+    'REDDIT_USER_AGENT': 'persona script by /u/Significant_Talk5727',
+    'MAX_WORKERS': min(4, mp.cpu_count()), 
+    'BATCH_SIZE': 50,  
+    'CACHE_ENABLED': True,  
+}
